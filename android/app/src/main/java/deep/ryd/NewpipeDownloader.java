@@ -2,10 +2,11 @@ package deep.ryd;
 
 import android.text.TextUtils;
 
-import org.schabi.newpipe.extractor.DownloadRequest;
-import org.schabi.newpipe.extractor.DownloadResponse;
+import org.schabi.newpipe.extractor.downloader.Request;
+import org.schabi.newpipe.extractor.downloader.Response;
+import org.schabi.newpipe.extractor.downloader.Downloader;
 import org.schabi.newpipe.extractor.exceptions.ReCaptchaException;
-import org.schabi.newpipe.extractor.utils.Localization;
+import org.schabi.newpipe.extractor.localization.Localization;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -16,14 +17,6 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import javax.annotation.Nullable;
-
-import okhttp3.MediaType;
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.RequestBody;
-import okhttp3.Response;
-import okhttp3.ResponseBody;
-
 
 /*
  * Created by Christian Schabesberger on 28.01.16.
@@ -45,14 +38,14 @@ import okhttp3.ResponseBody;
  * along with NewPipe.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-public class NewpipeDownloader implements org.schabi.newpipe.extractor.Downloader {
+public class NewpipeDownloader extends Downloader {
     public static final String USER_AGENT = "Mozilla/5.0 (Windows NT 6.1; WOW64; rv:43.0) Gecko/20100101 Firefox/43.0";
 
     private static NewpipeDownloader instance;
     private String mCookies;
-    private final OkHttpClient client;
+    private final okhttp3.OkHttpClient client;
 
-    private NewpipeDownloader(OkHttpClient.Builder builder) {
+    private NewpipeDownloader(okhttp3.OkHttpClient.Builder builder) {
         this.client = builder
                 .readTimeout(30, TimeUnit.SECONDS)
                 //.cache(new Cache(new File(context.getExternalCacheDir(), "okhttp"), 16 * 1024 * 1024))
@@ -64,8 +57,8 @@ public class NewpipeDownloader implements org.schabi.newpipe.extractor.Downloade
      *
      * @param builder if null, default builder will be used
      */
-    public static NewpipeDownloader init(@Nullable OkHttpClient.Builder builder) {
-        return instance = new NewpipeDownloader(builder != null ? builder : new OkHttpClient.Builder());
+    public static NewpipeDownloader init(@Nullable okhttp3.OkHttpClient.Builder builder) {
+        return instance = new NewpipeDownloader(builder != null ? builder : new okhttp3.OkHttpClient.Builder());
     }
 
     public static NewpipeDownloader getInstance() {
@@ -87,9 +80,9 @@ public class NewpipeDownloader implements org.schabi.newpipe.extractor.Downloade
      * @return the size of the content, in bytes
      */
     public long getContentLength(String url) throws IOException {
-        Response response = null;
+        okhttp3.Response response = null;
         try {
-            final Request request = new Request.Builder()
+            final okhttp3.Request request = new okhttp3.Request.Builder()
                     .head().url(url)
                     .addHeader("User-Agent", USER_AGENT)
                     .build();
@@ -114,10 +107,9 @@ public class NewpipeDownloader implements org.schabi.newpipe.extractor.Downloade
      * @param localization the language and country (usually a 2-character code) to set
      * @return the contents of the specified text file
      */
-    @Override
     public String download(String siteUrl, Localization localization) throws IOException, ReCaptchaException {
         Map<String, String> requestProperties = new HashMap<>();
-        requestProperties.put("Accept-Language", localization.getLanguage());
+        requestProperties.put("Accept-Language", localization.getLanguageCode());
         return download(siteUrl, requestProperties);
     }
 
@@ -130,7 +122,6 @@ public class NewpipeDownloader implements org.schabi.newpipe.extractor.Downloade
      * @return the contents of the specified text file
      * @throws IOException
      */
-    @Override
     public String download(String siteUrl, Map<String, String> customProperties) throws IOException, ReCaptchaException {
         return getBody(siteUrl, customProperties).string();
     }
@@ -143,8 +134,8 @@ public class NewpipeDownloader implements org.schabi.newpipe.extractor.Downloade
         }
     }
 
-    private ResponseBody getBody(String siteUrl, Map<String, String> customProperties) throws IOException, ReCaptchaException {
-        final Request.Builder requestBuilder = new Request.Builder()
+    private okhttp3.ResponseBody getBody(String siteUrl, Map<String, String> customProperties) throws IOException, ReCaptchaException {
+        final okhttp3.Request.Builder requestBuilder = new okhttp3.Request.Builder()
                 .method("GET", null).url(siteUrl);
 
         for (Map.Entry<String, String> header : customProperties.entrySet()) {
@@ -159,12 +150,12 @@ public class NewpipeDownloader implements org.schabi.newpipe.extractor.Downloade
             requestBuilder.addHeader("Cookie", mCookies);
         }
 
-        final Request request = requestBuilder.build();
-        final Response response = client.newCall(request).execute();
-        final ResponseBody body = response.body();
+        final okhttp3.Request request = requestBuilder.build();
+        final okhttp3.Response response = client.newCall(request).execute();
+        final okhttp3.ResponseBody body = response.body();
 
         if (response.code() == 429) {
-            throw new ReCaptchaException("reCaptcha Challenge requested");
+            throw new ReCaptchaException("reCaptcha Challenge requested", siteUrl);
         }
 
         if (body == null) {
@@ -182,18 +173,15 @@ public class NewpipeDownloader implements org.schabi.newpipe.extractor.Downloade
      * @param siteUrl the URL of the text file to download
      * @return the contents of the specified text file
      */
-    @Override
     public String download(String siteUrl) throws IOException, ReCaptchaException {
         return download(siteUrl, Collections.emptyMap());
     }
 
-
-    @Override
-    public DownloadResponse get(String siteUrl, DownloadRequest request) throws IOException, ReCaptchaException {
-        final Request.Builder requestBuilder = new Request.Builder()
+    public Response get(String siteUrl, Request request) throws IOException, ReCaptchaException {
+        final okhttp3.Request.Builder requestBuilder = new okhttp3.Request.Builder()
                 .method("GET", null).url(siteUrl);
 
-        Map<String, List<String>> requestHeaders = request.getRequestHeaders();
+        Map<String, List<String>> requestHeaders = request.headers();
         // set custom headers in request
         for (Map.Entry<String, List<String>> pair : requestHeaders.entrySet()) {
             for(String value : pair.getValue()){
@@ -209,12 +197,12 @@ public class NewpipeDownloader implements org.schabi.newpipe.extractor.Downloade
             requestBuilder.addHeader("Cookie", mCookies);
         }
 
-        final Request okRequest = requestBuilder.build();
-        final Response response = client.newCall(okRequest).execute();
-        final ResponseBody body = response.body();
+        final okhttp3.Request okRequest = requestBuilder.build();
+        final okhttp3.Response response = client.newCall(okRequest).execute();
+        final okhttp3.ResponseBody body = response.body();
 
         if (response.code() == 429) {
-            throw new ReCaptchaException("reCaptcha Challenge requested");
+            throw new ReCaptchaException("reCaptcha Challenge requested", siteUrl);
         }
 
         if (body == null) {
@@ -222,18 +210,22 @@ public class NewpipeDownloader implements org.schabi.newpipe.extractor.Downloade
             return null;
         }
 
-        return new DownloadResponse(body.string(), response.headers().toMultimap());
+        return new Response(200, body.string(), response.headers().toMultimap(), response.body().string(), siteUrl);
     }
 
     @Override
-    public DownloadResponse get(String siteUrl) throws IOException, ReCaptchaException {
-        return get(siteUrl, DownloadRequest.emptyRequest);
+    public Response get(String siteUrl) throws IOException, ReCaptchaException {
+        return get(siteUrl, Request.newBuilder().build());
     }
 
     @Override
-    public DownloadResponse post(String siteUrl, DownloadRequest request) throws IOException, ReCaptchaException {
+    public Response execute(@javax.annotation.Nonnull Request request) throws IOException, ReCaptchaException {
+        return post(request.url(), request);
+    }
 
-        Map<String, List<String>> requestHeaders = request.getRequestHeaders();
+    public Response post(String siteUrl, Request request) throws IOException, ReCaptchaException {
+
+        Map<String, List<String>> requestHeaders = request.headers();
         if(null == requestHeaders.get("Content-Type") || requestHeaders.get("Content-Type").isEmpty()){
             // content type header is required. maybe throw an exception here
             return null;
@@ -241,11 +233,11 @@ public class NewpipeDownloader implements org.schabi.newpipe.extractor.Downloade
 
         String contentType = requestHeaders.get("Content-Type").get(0);
 
-        RequestBody okRequestBody = null;
-        if(null != request.getRequestBody()){
-            okRequestBody = RequestBody.create(MediaType.parse(contentType), request.getRequestBody());
+        okhttp3.RequestBody okRequestBody = null;
+        if(null != request.dataToSend()){
+            okRequestBody = okhttp3.RequestBody.create(request.dataToSend(), okhttp3.MediaType.parse(contentType));
         }
-        final Request.Builder requestBuilder = new Request.Builder()
+        final okhttp3.Request.Builder requestBuilder = new okhttp3.Request.Builder()
                 .method("POST",  okRequestBody).url(siteUrl);
 
         // set custom headers in request
@@ -263,12 +255,12 @@ public class NewpipeDownloader implements org.schabi.newpipe.extractor.Downloade
             requestBuilder.addHeader("Cookie", mCookies);
         }
 
-        final Request okRequest = requestBuilder.build();
-        final Response response = client.newCall(okRequest).execute();
-        final ResponseBody body = response.body();
+        final okhttp3.Request okRequest = requestBuilder.build();
+        final okhttp3.Response response = client.newCall(okRequest).execute();
+        final okhttp3.ResponseBody body = response.body();
 
         if (response.code() == 429) {
-            throw new ReCaptchaException("reCaptcha Challenge requested");
+            throw new ReCaptchaException("reCaptcha Challenge requested", siteUrl);
         }
 
         if (body == null) {
@@ -276,6 +268,6 @@ public class NewpipeDownloader implements org.schabi.newpipe.extractor.Downloade
             return null;
         }
 
-        return new DownloadResponse(body.string(), response.headers().toMultimap());
+        return new Response(200, body.string(), response.headers().toMultimap(), response.body().string(), siteUrl);
     }
 }
